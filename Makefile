@@ -13,8 +13,7 @@ ANIMATE =  convert \
 	-unsharp 0x1 \
 	-loop 0 /tmp/adpredictor/*.png  
 
-all:
-	test
+all: | test
 
 proto:
 	mkdir -p protobufs

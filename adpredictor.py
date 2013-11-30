@@ -16,59 +16,44 @@ class AdPredictor(object):
     def __init__(self, config):
         self._config = config
         self._weights = {}
-        # Initial bias weight
-        self._set_weight(
-            util.bias_feature(),
-            util.prior_bias_weight(
-                config.prior_probability, config.beta, config.num_features))
 
-    @property
-    def weights(self):
-        return [(util.deserialize_feature(f), w)
-                for (f, w) in self._weights.iteritems()]
+        # Initial bias weight
+        bias_weight = util.prior_bias_weight(
+            config.prior_probability,
+            config.beta,
+            config.num_features)
+
+        self._set_weight(util.bias_feature(), bias_weight)
 
     def predict(self, features):
         logger.info("Predicting: %s features", len(features))
-        logger.debug("Predicting: %s", map(util.pp, features))
-
         assert len(features) == self._config.num_features
-        return norm.cdf(self._total_mean(features) /
-                        self._total_variance(features))
+
+        total_mean, total_variance = self._active_mean_variance(features)
+        return norm.cdf(total_mean / total_variance)
 
     def train(self, features, label):
         logger.info("Training: %s, %s features", label, len(features))
-        logger.debug("Training: %s, %s", label, map(util.pp, features))
         assert len(features) == self._config.num_features
 
         y = util.label_to_float(label)
-        sigmaSquared = self._total_variance(features)
-        totalMean = self._total_mean(features)
-        surprise = y * totalMean / sigmaSquared
-
-        v, w = util.gaussian_corrections(y * totalMean / sigmaSquared)
-
-        assert 0.0 <= w < 1.0, \
-            "w should be bounded in [0, 1] - %s, %s, %s, %s, %s" % \
-            (totalMean, sigmaSquared, surprise, v, w)
+        total_mean, total_variance = self._active_mean_variance(features)
+        v, w = util.gaussian_corrections(y * total_mean / total_variance)
 
         for feature in features:
             weight = self._get_weight(feature)
-            assert 0.0 < weight.variance / sigmaSquared < 1.0
-
-            mean_delta = y * weight.variance / np.sqrt(sigmaSquared) * v
-            variance_multiplier = 1.0 - weight.variance / sigmaSquared * w
-            update = pb.Gaussian(
+            mean_delta = y * weight.variance / np.sqrt(total_variance) * v
+            variance_multiplier = 1.0 - weight.variance / total_variance * w
+            updated = pb.Gaussian(
                 mean=weight.mean + mean_delta,
                 variance=weight.variance * variance_multiplier)
 
-            self._set_weight(feature, self._apply_dynamics(update))
+            self._set_weight(feature, self._apply_dynamics(updated))
 
-    def _total_variance(self, features):
-        sigmaSquared = self._config.beta ** 2
-        for feature in features:
-            weight = self._get_weight(feature)
-            sigmaSquared += weight.variance
-        return sigmaSquared
+    def _active_mean_variance(self, features):
+        means = (self._get_weight(f).mean for f in features)
+        variances = (self._get_weight(f).variance for f in features)
+        return sum(means), sum(variances) + self._config.beta ** 2
 
     def _get_weight(self, feature):
         return self._weights.get(
@@ -84,12 +69,10 @@ class AdPredictor(object):
         assert weight.variance >= 0.0
         self._weights[util.serialize_feature(feature)] = weight
 
-    def _total_mean(self, features):
-        meanSum = 0
-        for feature in features:
-            weight = self._get_weight(feature)
-            meanSum += weight.mean
-        return meanSum
+    @property
+    def weights(self):
+        return [(util.deserialize_feature(f), w)
+                for (f, w) in self._weights.iteritems()]
 
     def _apply_dynamics(self, weight):
         prior = util.prior_weight()
