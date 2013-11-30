@@ -101,29 +101,37 @@ class SimulationRunner(object):
         self._predictor = AdPredictor(simulation.predictor_config)
         self._sampler = Sampler(simulation)
 
-    def _current_weights(self):
+    def _current_weights_by_feature(self):
         by_feature = lambda kv: kv[0].feature
         by_feature_value = lambda kv: (kv[0].feature, kv[0].value)
         weights = sorted(self._predictor.weights, key=by_feature_value)
         for feature, group in itertools.groupby(weights, key=by_feature):
             yield feature, [(f, w.mean, w.variance) for (f, w) in group]
 
-    def _visualize(self, num_examples):
-        plt.clf()
+    def _plot_weights(self):
         for color, (feature, weights) in itertools.izip(
                 itertools.cycle(self.COLORS),
-                self._current_weights()):
+                self._current_weights_by_feature()):
             _, means, variances = zip(*weights)
             logging.debug("Feature %s, Weights: %s", feature, weights)
 
             label = "F{}".format(feature) if feature != 0 else "Bias"
-            plt.scatter(means, variances, label=label, color=color, alpha=0.8)
+            plt.scatter(means, variances,
+                        label=label, color=color, alpha=0.8, s=40)
 
-            for (f, mean, variance) in weights:
-                bias_weight = self._sampler.get_bias_for_feature(f)
+    def _annotate_biased_weights(self):
+        for _, weights in self._current_weights_by_feature():
+            for (feature, mean, variance) in weights:
+                bias_weight = self._sampler.get_bias_for_feature(feature)
                 if bias_weight is not None:
-                    plt.annotate("{}".format('+' if bias_weight else '-'),
-                                 (mean, variance))
+                    plt.annotate('+' if bias_weight else '-', (mean, variance),
+                                 size=40)
+
+    def _visualize(self, num_examples):
+        plt.clf()
+
+        self._plot_weights()
+        self._annotate_biased_weights()
 
         plt.title(u"(μ, σ²) after {} examples".format(num_examples))
         plt.xlabel(u"μ")
@@ -134,7 +142,8 @@ class SimulationRunner(object):
 
         filename = "{:03d}.{}".format(num_examples, self._simulation.extension)
         logger.info("Saving graph to %s", filename)
-        plt.savefig(os.path.join(self._simulation.directory, filename), dpi=300)
+        plt.savefig(os.path.join(self._simulation.directory, filename),
+                    dpi=300)
 
     def run(self):
         samples = itertools.islice(self._sampler,

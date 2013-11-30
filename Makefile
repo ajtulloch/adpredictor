@@ -5,7 +5,7 @@ DEMO = python example.py \
 	--prior-probability 0.5 \
 	--visualization-interval 1 \
 	--biased-feature-proportion=0.02 \
-	--biased-feature-effect-length 100
+	--biased-feature-effect-length 200
 
 ANIMATE =  convert \
 	-delay 50 \
@@ -36,11 +36,11 @@ demo: | requirements proto
 	$(ANIMATE) /tmp/initial_learning.gif
 
 	rm -rf /tmp/adpredictor/*
-	$(DEMO) --num-examples 100 --visualization-interval 5
+	$(DEMO) --num-examples 200 --visualization-interval 10
 	$(ANIMATE) /tmp/convergence_learning.gif
 
 	rm -rf /tmp/adpredictor/*
-	$(DEMO) --num-examples 200 --visualization-interval 10
+	$(DEMO) --num-examples 400 --visualization-interval 20
 	$(ANIMATE) /tmp/online_learning.gif
 
 .PHONY:
