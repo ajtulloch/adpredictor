@@ -38,7 +38,7 @@ class AdPredictor(object):
 
         y = util.label_to_float(label)
         total_mean, total_variance = self._active_mean_variance(features)
-        v, w = util.gaussian_corrections(y * total_mean / total_variance)
+        v, w = util.gaussian_corrections(y * total_mean / np.sqrt(total_variance))
 
         for feature in features:
             weight = self._get_weight(feature)
